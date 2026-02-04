@@ -64,6 +64,8 @@ By default the service uses public endpoints. If you want to point to your own i
 
 - `NOMINATIM_BASE_URL` (default: public Nominatim)
 - `OVERPASS_API_URL` (default: public Overpass)
+- `CACHE_TTL_S` (default: 120 seconds)
+- `CACHE_MAX_SIZE` (default: 512 entries)
 
 Example (PowerShell):
 
@@ -129,6 +131,11 @@ Response sample:
 ]
 ```
 
+### Categories
+
+- `GET /api/categories`  
+  Returns supported categories and their OSM tag filters.
+
 ### Legacy endpoint
 
 - `POST /search`  
@@ -168,6 +175,25 @@ Then open docs:
 - `http://127.0.0.1:8000/docs`
 
 > If you add env vars to compose, make sure to pass `NOMINATIM_BASE_URL` and `OVERPASS_API_URL` as needed.
+
+---
+
+## Testing
+
+Run unit tests:
+
+```bash
+pytest
+```
+
+Manual API smoke checks (after `uvicorn app.main:app --reload`):
+
+```bash
+curl "http://127.0.0.1:8000/health"
+curl "http://127.0.0.1:8000/api/categories"
+curl "http://127.0.0.1:8000/api/geocode?q=Times%20Square"
+curl "http://127.0.0.1:8000/api/search?lat=40.7580&lon=-73.9855&category=cafe&radius_m=800&limit=5"
+```
 
 ---
 

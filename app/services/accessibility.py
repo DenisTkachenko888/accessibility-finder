@@ -7,6 +7,7 @@ import aiohttp
 
 from app.config import get_settings
 from app.models import Place
+from app.services.cache import TTLCache, make_cache_key
 
 # Very small starter mapping (easy to extend)
 # If you want a new category: add more tag tuples for it (key, value).
@@ -38,6 +39,14 @@ _STEP_FREE_KEYS = (
 
 YES_VALUES = {"yes", "true", "1"}
 NO_VALUES = {"no", "false", "0"}
+
+_settings = get_settings()
+_geocode_cache: TTLCache[Tuple[float, float, str]] = TTLCache(
+    ttl_s=_settings.cache_ttl_s, max_size=_settings.cache_max_size
+)
+_search_cache: TTLCache[List[Place]] = TTLCache(
+    ttl_s=_settings.cache_ttl_s, max_size=_settings.cache_max_size
+)
 
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -103,6 +112,10 @@ def _step_free_value(tags: Dict[str, Any]) -> Optional[bool]:
 async def geocode_query(session: aiohttp.ClientSession, q: str) -> Tuple[float, float, str]:
     """Geocode a free-text location query (Nominatim). Returns (lat, lon, display_name)."""
     settings = get_settings()
+    cache_key = make_cache_key("geocode", q.strip().lower())
+    cached = _geocode_cache.get(cache_key)
+    if cached is not None:
+        return cached
     params = {
         "q": q,
         "format": "jsonv2",
@@ -123,7 +136,9 @@ async def geocode_query(session: aiohttp.ClientSession, q: str) -> Tuple[float, 
         raise ValueError("Location not found")
 
     item = data[0]
-    return float(item["lat"]), float(item["lon"]), str(item.get("display_name", ""))
+    result = (float(item["lat"]), float(item["lon"]), str(item.get("display_name", "")))
+    _geocode_cache.set(cache_key, result)
+    return result
 
 
 def _category_filters(category: str) -> List[Tuple[str, str]]:
@@ -138,6 +153,13 @@ def _category_filters(category: str) -> List[Tuple[str, str]]:
             "or pass raw tag like 'amenity=cafe'."
         )
     return CATEGORY_TAGS[category]
+
+
+def list_categories() -> dict[str, list[dict[str, str]]]:
+    return {
+        name: [{"key": key, "value": value} for key, value in tags]
+        for name, tags in sorted(CATEGORY_TAGS.items())
+    }
 
 
 def _overpass_query(lat: float, lon: float, radius_m: int, tag_key: str, tag_value: str,
@@ -177,6 +199,21 @@ async def fetch_accessible_places(
 
     if radius_m is None:
         radius_m = 1500
+
+    cache_key = make_cache_key(
+        "search",
+        f"{lat:.6f}",
+        f"{lon:.6f}",
+        category.strip().lower(),
+        radius_m,
+        limit,
+        wheelchair or "",
+        toilets_wheelchair or "",
+        step_free,
+    )
+    cached = _search_cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     cat_filters = _category_filters(category)
 
@@ -246,4 +283,6 @@ async def fetch_accessible_places(
         )
 
     places.sort(key=lambda p: p.distance_m)
-    return places[: max(1, min(limit, 100))]
+    result = places[: max(1, min(limit, 100))]
+    _search_cache.set(cache_key, result)
+    return result
