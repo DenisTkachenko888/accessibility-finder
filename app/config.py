@@ -27,6 +27,9 @@ class Settings(BaseSettings):
 
     http_timeout_s: float = 20.0
 
+    cache_ttl_s: float = 120.0
+    cache_max_size: int = 512
+
 
 @lru_cache
 def get_settings() -> Settings:

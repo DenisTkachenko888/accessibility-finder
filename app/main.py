@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 
 from app.config import get_settings
 from app.models import Place, SearchRequest
-from app.services.accessibility import fetch_accessible_places, geocode_query
+from app.services.accessibility import fetch_accessible_places, geocode_query, list_categories
 
 settings = get_settings()
 
@@ -26,6 +26,11 @@ async def root():
 @app.get("/health", tags=["Healthcheck"])
 async def health():
     return {"ok": True}
+
+
+@app.get("/api/categories", tags=["Api Categories"])
+async def api_categories():
+    return {"categories": list_categories()}
 
 
 @app.get("/api/geocode", tags=["Api Geocode"])
